@@ -26,20 +26,27 @@ class CacheService {
 
   async connect() {
     try {
+      // If Redis env vars are not provided, skip Redis entirely
+      if (!process.env.REDIS_HOST) {
+        console.log('⚠️ REDIS_HOST not set. Skipping Redis connection.');
+        this.redis = null;
+        this.isConnected = false;
+        return null;
+      }
+
       this.redis = new Redis({
-        host: process.env.REDIS_HOST || 'localhost',
-        port: parseInt(process.env.REDIS_PORT) || 6379,
+        host: process.env.REDIS_HOST,
+        port: parseInt(process.env.REDIS_PORT || '6379', 10),
         password: process.env.REDIS_PASSWORD || undefined,
-        db: parseInt(process.env.REDIS_DB) || 0,
-        maxRetriesPerRequest: null,
-        retryStrategy: (times) => {
-          const delay = Math.min(times * 50, 2000);
-          return delay;
-        }
+        db: parseInt(process.env.REDIS_DB || '0', 10),
+
+        // Prevent endless retry loop on Render if Redis is unavailable
+        maxRetriesPerRequest: 1,
+        retryStrategy: () => null
       });
 
       this.redis.on('error', (error) => {
-        console.error('❌ Redis connection error:', error);
+        console.error('❌ Redis connection error:', error.message);
         this.isConnected = false;
       });
 
@@ -58,14 +65,15 @@ class CacheService {
 
       return this.redis;
     } catch (error) {
+      this.redis = null;
       this.isConnected = false;
-      console.error('❌ Failed to connect to Redis:', error);
+      console.warn('⚠️ Redis not available. Continuing without Redis.');
       return null;
     }
   }
 
   async get(key) {
-    if (!this.isConnected) return null;
+    if (!this.isConnected || !this.redis) return null;
     try {
       const value = await this.redis.get(key);
       return value ? JSON.parse(value) : null;
@@ -76,7 +84,7 @@ class CacheService {
   }
 
   async set(key, value, ttl = 300) {
-    if (!this.isConnected) return null;
+    if (!this.isConnected || !this.redis) return false;
     try {
       const serialized = JSON.stringify(value);
       await this.redis.set(key, serialized, 'EX', ttl);
@@ -88,7 +96,7 @@ class CacheService {
   }
 
   async delete(key) {
-    if (!this.isConnected) return null;
+    if (!this.isConnected || !this.redis) return false;
     try {
       await this.redis.del(key);
       return true;
@@ -99,7 +107,7 @@ class CacheService {
   }
 
   async clear() {
-    if (!this.isConnected) return null;
+    if (!this.isConnected || !this.redis) return false;
     try {
       await this.redis.flushdb();
       return true;
