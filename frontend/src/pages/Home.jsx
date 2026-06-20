@@ -1,6 +1,11 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import axios from 'axios';
 
+const API_BASE_URL = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
+const apiClient = axios.create({
+  baseURL: API_BASE_URL || undefined,
+});
+
 // Skeleton Loader Component
 const SkeletonLoader = ({ className = '' }) => (
   <div className={`animate-pulse ${className}`}>
@@ -98,20 +103,22 @@ const Home = () => {
   // Load demo databases
   const fetchDemoDbs = useCallback(async () => {
     try {
-      const response = await axios.get('/api/demo-databases');
-      setDemoDatabases(response.data.databases);
+      const response = await apiClient.get('/api/demo-databases');
+      setDemoDatabases(response.data.databases || []);
     } catch (error) {
       console.error('Error loading demo databases:', error);
+      setDemoDatabases([]);
     }
   }, []);
 
   // Load query history
   const fetchHistory = useCallback(async () => {
     try {
-      const response = await axios.get('/api/history');
-      setHistory(response.data.history);
+      const response = await apiClient.get('/api/history');
+      setHistory(response.data.history || []);
     } catch (error) {
       console.error('Error loading history:', error);
+      setHistory([]);
     }
   }, []);
 
@@ -123,9 +130,9 @@ const Home = () => {
   const loadDemoDatabase = useCallback(async (dbId) => {
     try {
       setLoading(true);
-      const response = await axios.get(`/api/demo-database/${dbId}`);
-      setSchema(response.data.schema);
-      setDbDetails(response.data);
+      const response = await apiClient.get(`/api/demo-database/${dbId}`);
+      setSchema(response.data.schema || null);
+      setDbDetails(response.data || null);
       setSelectedDemoDb(dbId);
       setSessionActive(true);
       setChatMessages([]);
@@ -133,7 +140,8 @@ const Home = () => {
       setDocumentation(null);
       setHealth(null);
     } catch (error) {
-      alert('Error loading demo database: ' + error.message);
+      console.error('Error loading demo database:', error);
+      alert('Error loading demo database: ' + (error.response?.data?.error || error.message));
     } finally {
       setLoading(false);
     }
@@ -157,7 +165,7 @@ const Home = () => {
         formData.append('schemaFile', schemaFile);
       }
 
-      const response = await axios.post('/api/parse-schema', formData, {
+      const response = await apiClient.post('/api/parse-schema', formData, {
         headers: {
           'Content-Type': 'multipart/form-data'
         }
@@ -204,7 +212,7 @@ const Home = () => {
         };
       }
 
-      const response = await axios.post('/api/schema', {
+      const response = await apiClient.post('/api/schema', {
         dbType,
         config
       });
@@ -230,7 +238,7 @@ const Home = () => {
     }
     try {
       setLoading(true);
-      const response = await axios.post('/api/generate', {
+      const response = await apiClient.post('/api/generate', {
         prompt,
         schema,
         dbType: 'mysql'
@@ -238,8 +246,8 @@ const Home = () => {
       setResult(response.data);
       setSelectedQueryIndex(0);
       // Refresh history
-      const historyResponse = await axios.get('/api/history');
-      setHistory(historyResponse.data.history);
+      const historyResponse = await apiClient.get('/api/history');
+      setHistory(historyResponse.data.history || []);
     } catch (error) {
       alert('Error generating queries: ' + error.message);
     } finally {
@@ -254,7 +262,7 @@ const Home = () => {
     }
     try {
       setLoading(true);
-      const response = await axios.post('/api/document', { schema });
+      const response = await apiClient.post('/api/document', { schema });
       setDocumentation(response.data.documentation);
     } catch (error) {
       alert('Error generating documentation: ' + error.message);
@@ -270,7 +278,7 @@ const Home = () => {
     }
     try {
       setLoading(true);
-      const response = await axios.post('/api/analyze-health', { schema });
+      const response = await apiClient.post('/api/analyze-health', { schema });
       setHealth(response.data.health);
     } catch (error) {
       alert('Error analyzing database health: ' + error.message);
@@ -286,7 +294,7 @@ const Home = () => {
     }
     try {
       setLoading(true);
-      const response = await axios.post('/api/translate', {
+      const response = await apiClient.post('/api/translate', {
         sql: result.queries[selectedQueryIndex].sql,
         sourceDb: 'mysql',
         targetDb
@@ -304,11 +312,11 @@ const Home = () => {
     
     try {
       setChatLoading(true);
-      const response = await axios.post('/api/chat', {
+      const response = await apiClient.post('/api/chat', {
         prompt: chatInput,
         messages: chatMessages
       });
-      setChatMessages(response.data.chatHistory);
+      setChatMessages(response.data.chatHistory || []);
       setChatInput('');
     } catch (error) {
       alert('Error in chat: ' + (error.response?.data?.error || error.message));
