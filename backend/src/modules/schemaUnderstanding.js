@@ -1,6 +1,12 @@
 const mysql = require('mysql2/promise');
 const { Pool } = require('pg');
-const sqlite3 = require('sqlite3').verbose();
+
+let sqlite3 = null;
+try {
+  sqlite3 = require('sqlite3').verbose();
+} catch (err) {
+  console.warn('SQLite support is not available in this deployment');
+}
 
 class SchemaUnderstanding {
   static async getMySQLSchema(config) {
@@ -82,6 +88,10 @@ class SchemaUnderstanding {
   }
 
   static async getSQLiteSchema(config) {
+    if (!sqlite3) {
+      throw new Error('SQLite support is not available in this deployment');
+    }
+
     return new Promise((resolve, reject) => {
       const db = new sqlite3.Database(config.path, (err) => {
         if (err) reject(err);
